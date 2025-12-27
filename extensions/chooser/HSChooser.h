@@ -21,6 +21,8 @@
 @property (nonatomic, weak) IBOutlet NSVisualEffectView *effectView;
 
 @property (nonatomic, strong) NSMutableArray *eventMonitors;
+@property (nonatomic, strong) NSDictionary *keyboardHandlers;
+@property (nonatomic, strong) id keyboardMonitor;
 @property (nonatomic) BOOL hasChosen;
 @property (nonatomic) BOOL reloadWhenVisible;
 
