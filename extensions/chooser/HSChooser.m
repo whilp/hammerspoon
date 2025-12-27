@@ -29,6 +29,8 @@
         self.fontName = nil;
         self.fontSize = 0;
         self.searchSubText = NO;
+        self.showShortcuts = YES;
+        self.showImages = YES;
 
         // We're setting these directly, because we've overridden the setters and we don't need to invoke those now
         _fgColor = nil;
@@ -84,7 +86,7 @@
 }
 
 - (void)windowDidBecomeKey:(NSNotification *)notification {
-    __weak id _self = self;
+    __weak HSChooser *_self = self;
     __weak id _tableView = self.choicesTableView;
     __weak id _window = self.window;
 
@@ -93,18 +95,24 @@
         self.reloadWhenVisible = NO;
     }
 
-    self.keyboardHandlers = @{
-        [self keyForModifiers:NSEventModifierFlagCommand character:@"1"]: ^{ [_self tableView:_tableView didClickedRow:0]; },
-        [self keyForModifiers:NSEventModifierFlagCommand character:@"2"]: ^{ [_self tableView:_tableView didClickedRow:1]; },
-        [self keyForModifiers:NSEventModifierFlagCommand character:@"3"]: ^{ [_self tableView:_tableView didClickedRow:2]; },
-        [self keyForModifiers:NSEventModifierFlagCommand character:@"4"]: ^{ [_self tableView:_tableView didClickedRow:3]; },
-        [self keyForModifiers:NSEventModifierFlagCommand character:@"5"]: ^{ [_self tableView:_tableView didClickedRow:4]; },
-        [self keyForModifiers:NSEventModifierFlagCommand character:@"6"]: ^{ [_self tableView:_tableView didClickedRow:5]; },
-        [self keyForModifiers:NSEventModifierFlagCommand character:@"7"]: ^{ [_self tableView:_tableView didClickedRow:6]; },
-        [self keyForModifiers:NSEventModifierFlagCommand character:@"8"]: ^{ [_self tableView:_tableView didClickedRow:7]; },
-        [self keyForModifiers:NSEventModifierFlagCommand character:@"9"]: ^{ [_self tableView:_tableView didClickedRow:8]; },
-        [self keyForModifiers:NSEventModifierFlagCommand character:@"0"]: ^{ [_self tableView:_tableView didClickedRow:9]; },
+    NSMutableDictionary *handlers = [NSMutableDictionary dictionary];
 
+    if (self.showShortcuts) {
+        [handlers addEntriesFromDictionary:@{
+            [self keyForModifiers:NSEventModifierFlagCommand character:@"1"]: ^{ [_self tableView:_tableView didClickedRow:0]; },
+            [self keyForModifiers:NSEventModifierFlagCommand character:@"2"]: ^{ [_self tableView:_tableView didClickedRow:1]; },
+            [self keyForModifiers:NSEventModifierFlagCommand character:@"3"]: ^{ [_self tableView:_tableView didClickedRow:2]; },
+            [self keyForModifiers:NSEventModifierFlagCommand character:@"4"]: ^{ [_self tableView:_tableView didClickedRow:3]; },
+            [self keyForModifiers:NSEventModifierFlagCommand character:@"5"]: ^{ [_self tableView:_tableView didClickedRow:4]; },
+            [self keyForModifiers:NSEventModifierFlagCommand character:@"6"]: ^{ [_self tableView:_tableView didClickedRow:5]; },
+            [self keyForModifiers:NSEventModifierFlagCommand character:@"7"]: ^{ [_self tableView:_tableView didClickedRow:6]; },
+            [self keyForModifiers:NSEventModifierFlagCommand character:@"8"]: ^{ [_self tableView:_tableView didClickedRow:7]; },
+            [self keyForModifiers:NSEventModifierFlagCommand character:@"9"]: ^{ [_self tableView:_tableView didClickedRow:8]; },
+            [self keyForModifiers:NSEventModifierFlagCommand character:@"0"]: ^{ [_self tableView:_tableView didClickedRow:9]; }
+        }];
+    }
+
+    [handlers addEntriesFromDictionary:@{
         [self keyForModifiers:0 keyCode:27]: ^{ [_window resignKeyWindow]; },
 
         [self keyForModifiers:NSEventModifierFlagFunction|NSEventModifierFlagNumericPad keyCode:NSUpArrowFunctionKey]: ^{ [_self selectPreviousChoice]; },
@@ -115,7 +123,9 @@
         [self keyForModifiers:NSEventModifierFlagFunction keyCode:NSPageUpFunctionKey]: ^{ [_self selectPreviousPage]; },
         [self keyForModifiers:NSEventModifierFlagFunction keyCode:NSPageDownFunctionKey]: ^{ [_self selectNextPage]; },
         [self keyForModifiers:NSEventModifierFlagControl character:@"v"]: ^{ [_self selectNextPage]; }
-    };
+    }];
+
+    self.keyboardHandlers = handlers;
 
     self.keyboardMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown handler:^NSEvent*(NSEvent* event) {
         NSEventModifierFlags flags = ([event modifierFlags] & NSEventModifierFlagDeviceIndependentFlagsMask);
@@ -376,12 +386,6 @@
     }
     if (image && ![image isKindOfClass:[NSImage class]]) image = nil;
 
-    if (row >= 0 && row < 9) {
-        shortcutText = [NSString stringWithFormat:@"⌘%ld", (long)row + 1];
-    } else {
-        shortcutText = @"";
-    }
-
     NSString *chooserCellIdentifier = subText ?  @"HSChooserCellSubtext" : @"HSChooserCell";
     HSChooserCell *cellView = [tableView makeViewWithIdentifier:chooserCellIdentifier owner:self];
 
@@ -399,8 +403,15 @@
         }
     }
 
+    cellView.shortcutText.hidden = !self.showShortcuts;
+    if (self.showShortcuts && row >= 0 && row < 9) {
+        shortcutText = [NSString stringWithFormat:@"⌘%ld", (long)row + 1];
+    } else {
+        shortcutText = @"";
+    }
     cellView.shortcutText.stringValue = shortcutText ? shortcutText : @"??";
-    cellView.image.image = image ? image : self.defaultImage;
+    cellView.image.hidden = !self.showImages;
+    cellView.image.image = self.showImages ? (image ? image : self.defaultImage) : nil;
 
     if (self.fgColor) {
         cellView.text.textColor = self.fgColor;

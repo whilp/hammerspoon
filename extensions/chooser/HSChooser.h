@@ -33,6 +33,8 @@
 @property(nonatomic) CGFloat fontSize;
 @property(nonatomic) BOOL searchSubText;
 @property(nonatomic) BOOL enableDefaultForQuery;
+@property(nonatomic) BOOL showShortcuts;
+@property(nonatomic) BOOL showImages;
 
 @property(nonatomic) NSColor *fgColor;
 @property(nonatomic) NSColor *subTextColor;

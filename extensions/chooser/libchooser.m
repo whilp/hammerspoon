@@ -655,6 +655,81 @@ static int chooserSetSearchSubText(lua_State *L) {
     return 1;
 }
 
+/// hs.chooser:showImages([showImages]) -> hs.chooser object or boolean
+/// Method
+/// Gets/Sets whether the chooser should show the image column
+///
+/// Parameters:
+///  * showImages - An optional boolean, true to show images, false to hide the image column. If this parameter is omitted, the current configuration value will be returned
+///
+/// Returns:
+///  * The `hs.chooser` object if a value was set, or a boolean if no parameter was passed
+///
+/// Notes:
+///  * This should be used before a chooser has been displayed
+static int chooserSetShowImages(lua_State *L) {
+    LuaSkin *skin = [LuaSkin sharedWithState:L];
+    [skin checkArgs:LS_TUSERDATA, USERDATA_TAG, LS_TBOOLEAN | LS_TOPTIONAL, LS_TBREAK];
+
+    HSChooser *chooser = [skin toNSObjectAtIndex:1];
+
+    switch (lua_type(L, 2)) {
+        case LUA_TBOOLEAN:
+            chooser.showImages = lua_toboolean(L, 2);
+            lua_pushvalue(L, 1);
+            break;
+
+        case LUA_TNONE:
+            lua_pushboolean(L, chooser.showImages);
+            return 1;
+
+        default:
+            NSLog(@"ERROR: Unknown type passed to hs.chooser:showImages(). This should not be possible");
+            lua_pushnil(L);
+            break;
+    }
+
+    return 1;
+}
+
+/// hs.chooser:showShortcuts([showShortcuts]) -> hs.chooser object or boolean
+/// Method
+/// Gets/Sets whether the chooser should show keyboard shortcuts (⌘1-9) in the UI and enable the shortcuts
+///
+/// Parameters:
+///  * showShortcuts - An optional boolean, true to show shortcuts and enable keyboard shortcuts, false to hide them. If this parameter is omitted, the current configuration value will be returned
+///
+/// Returns:
+///  * The `hs.chooser` object if a value was set, or a boolean if no parameter was passed
+///
+/// Notes:
+///  * This should be used before a chooser has been displayed
+///  * When set to false, both the visual shortcut indicators (⌘1-9) and the keyboard shortcuts themselves are disabled
+static int chooserSetShowShortcuts(lua_State *L) {
+    LuaSkin *skin = [LuaSkin sharedWithState:L];
+    [skin checkArgs:LS_TUSERDATA, USERDATA_TAG, LS_TBOOLEAN | LS_TOPTIONAL, LS_TBREAK];
+
+    HSChooser *chooser = [skin toNSObjectAtIndex:1];
+
+    switch (lua_type(L, 2)) {
+        case LUA_TBOOLEAN:
+            chooser.showShortcuts = lua_toboolean(L, 2);
+            lua_pushvalue(L, 1);
+            break;
+
+        case LUA_TNONE:
+            lua_pushboolean(L, chooser.showShortcuts);
+            return 1;
+
+        default:
+            NSLog(@"ERROR: Unknown type passed to hs.chooser:showShortcuts(). This should not be possible");
+            lua_pushnil(L);
+            break;
+    }
+
+    return 1;
+}
+
 /// hs.chooser:width([percent]) -> hs.chooser object or number
 /// Method
 /// Gets/Sets the width of the chooser
@@ -931,6 +1006,8 @@ static const luaL_Reg userdataLib[] = {
     {"bgDark", chooserSetBgDark},
     {"placeholderText", chooserPlaceholder},
     {"searchSubText", chooserSetSearchSubText},
+    {"showImages", chooserSetShowImages},
+    {"showShortcuts", chooserSetShowShortcuts},
     {"enableDefaultForQuery", chooserSetEnableDefaultForQuery},
     {"width", chooserSetWidth},
     {"rows", chooserSetNumRows},
