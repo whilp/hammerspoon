@@ -297,6 +297,13 @@
         [skin protectedCallAndError:@"hs.chooser.globalCallback willOpen" nargs:2 nresults:0];
     }
 
+    // Load data before showing window to avoid empty flash
+    [self controlTextDidChange:[NSNotification notificationWithName:@"Unused" object:nil]];
+
+    // Force immediate layout so selection is visible when window appears
+    [self.choicesTableView layoutSubtreeIfNeeded];
+    [self.window.contentView layoutSubtreeIfNeeded];
+
     [self resizeWindow];
 
     [self showWindow:self];
@@ -311,13 +318,6 @@
     [self.window makeFirstResponder:self.queryField];
 
     [self.window setLevel:(CGWindowLevelForKey(kCGMainMenuWindowLevelKey) + 3)];
-
-    //if (!self.window.isKeyWindow) {
-    //    NSApplication *app = [NSApplication sharedApplication];
-    //    [app activateIgnoringOtherApps:YES];
-    //}
-
-    [self controlTextDidChange:[NSNotification notificationWithName:@"Unused" object:nil]];
 
     if (self.showCallbackRef != LUA_NOREF && self.showCallbackRef != LUA_REFNIL) {
         [skin pushLuaRef:self.refTable ref:self.showCallbackRef];
@@ -573,17 +573,26 @@
             self.filteredChoices = nil;
         }
         self.cachedChoicesForReload = [self getChoices];
-        [self.choicesTableView reloadData];
-        self.cachedChoicesForReload = nil;
 
-        // Apply initial row selection after reload
-        if (self.initialSelectedRow > 0) {
-            NSInteger maxRow = self.choicesTableView.numberOfRows - 1;
-            NSInteger row = self.initialSelectedRow - 1;  // Convert from 1-indexed Lua to 0-indexed
-            row = (row < 0) ? 0 : ((row > maxRow) ? maxRow : row);
-            [self.choicesTableView selectRowIndexes:[NSIndexSet indexSetWithIndex:row] byExtendingSelection:NO];
-            [self.choicesTableView scrollRowToVisible:row];
+        // Temporarily allow empty selection to prevent auto-select of row 0
+        BOOL wasAllowingEmpty = self.choicesTableView.allowsEmptySelection;
+        self.choicesTableView.allowsEmptySelection = YES;
+        [self.choicesTableView reloadData];
+
+        // Select desired row without animation
+        NSInteger targetRow = (self.initialSelectedRow > 0) ? self.initialSelectedRow - 1 : 0;
+        NSInteger maxRow = self.choicesTableView.numberOfRows - 1;
+        if (maxRow >= 0) {
+            targetRow = (targetRow < 0) ? 0 : ((targetRow > maxRow) ? maxRow : targetRow);
+            [NSAnimationContext beginGrouping];
+            [[NSAnimationContext currentContext] setDuration:0];
+            [self.choicesTableView selectRowIndexes:[NSIndexSet indexSetWithIndex:targetRow] byExtendingSelection:NO];
+            [self.choicesTableView scrollRowToVisible:targetRow];
+            [NSAnimationContext endGrouping];
         }
+
+        self.choicesTableView.allowsEmptySelection = wasAllowingEmpty;
+        self.cachedChoicesForReload = nil;
     }
 }
 
