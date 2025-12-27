@@ -11,6 +11,17 @@ The chooser extension has significant optimization opportunities across four are
 - Use `enumerateAvailableRowViewsUsingBlock:` for color updates
 - Cache default placeholder image at init
 
+## Completed optimizations (PR #2)
+
+- **P0:** Fixed row height XIB setting (removed `usesAutomaticRowHeights`)
+- **P0:** Consolidated 17 keyboard event monitors into single unified handler with dictionary dispatch
+- **P1:** Added `hs.chooser:showImages(bool)` API to toggle image column
+- **P1:** Added `hs.chooser:showShortcuts(bool)` API to toggle shortcuts display and keyboard handlers
+- **P1:** Added `hs.chooser:queryDebounce(seconds)` API for debouncing query changed callback
+- **P2:** Fixed scroll view settings (`usesPredominantAxisScrolling`, `copiesOnScroll`)
+- **P2:** Pre-index choice text for faster filtering (avoids repeated `lowercaseString` calls)
+- **P2:** Cache `getChoices()` during reload cycle
+
 ---
 
 ## Critical issues
@@ -292,18 +303,18 @@ chooser:textOnly(true)
 
 ## Implementation priority
 
-| Priority | Optimization | Effort | Impact |
-|----------|--------------|--------|--------|
-| P0 | Consolidate event monitors | Medium | High |
-| P0 | Fix row height XIB setting | Low | Medium |
-| P1 | Optional images API | Medium | Medium |
-| P1 | Optional shortcuts API | Low | Medium |
-| P1 | Query callback debouncing | Medium | Medium |
-| P2 | Pre-index choice text | Medium | Medium |
-| P2 | Fix scroll view settings | Low | Low |
-| P2 | Cache getChoices() | Low | Low |
-| P3 | Unified cell type | Medium | Low |
-| P3 | Remove custom centering cell | High | Low |
+| Priority | Optimization | Effort | Impact | Status |
+|----------|--------------|--------|--------|--------|
+| P0 | Consolidate event monitors | Medium | High | ✅ Done |
+| P0 | Fix row height XIB setting | Low | Medium | ✅ Done |
+| P1 | Optional images API | Medium | Medium | ✅ Done |
+| P1 | Optional shortcuts API | Low | Medium | ✅ Done |
+| P1 | Query callback debouncing | Medium | Medium | ✅ Done |
+| P2 | Pre-index choice text | Medium | Medium | ✅ Done |
+| P2 | Fix scroll view settings | Low | Low | ✅ Done |
+| P2 | Cache getChoices() | Low | Low | ✅ Done |
+| P3 | Unified cell type | Medium | Low | Pending |
+| P3 | Remove custom centering cell | High | Low | Pending |
 
 ---
 
