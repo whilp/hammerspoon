@@ -330,7 +330,12 @@
     [self.queryDebounceTimer invalidate];
     self.queryDebounceTimer = nil;
 
-    self.window.isVisible = NO;
+    // Move window off-screen immediately for instant visual feedback
+    [self.window setFrameOrigin:NSMakePoint(-10000, -10000)];
+    // Queue actual orderOut async to avoid blocking on window server
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self.window orderOut:nil];
+    });
 
     // Call hs.chooser.globalCallback("didClose")
     LuaSkin *skin = [LuaSkin sharedWithState:NULL];
