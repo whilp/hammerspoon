@@ -35,6 +35,8 @@
 @property(nonatomic) BOOL enableDefaultForQuery;
 @property(nonatomic) BOOL showShortcuts;
 @property(nonatomic) BOOL showImages;
+@property(nonatomic) NSTimeInterval queryDebounceInterval;
+@property(nonatomic, strong) NSTimer *queryDebounceTimer;
 
 @property(nonatomic) NSColor *fgColor;
 @property(nonatomic) NSColor *subTextColor;

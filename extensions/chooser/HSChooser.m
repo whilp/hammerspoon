@@ -31,6 +31,8 @@
         self.searchSubText = NO;
         self.showShortcuts = YES;
         self.showImages = YES;
+        self.queryDebounceInterval = 0;
+        self.queryDebounceTimer = nil;
 
         // We're setting these directly, because we've overridden the setters and we don't need to invoke those now
         _fgColor = nil;
@@ -321,6 +323,9 @@
 }
 
 - (void)hide {
+    [self.queryDebounceTimer invalidate];
+    self.queryDebounceTimer = nil;
+
     self.window.isVisible = NO;
 
     // Call hs.chooser.globalCallback("didClose")
@@ -505,14 +510,26 @@
 
     if (self.queryChangedCallbackRef != LUA_NOREF && self.queryChangedCallbackRef != LUA_REFNIL) {
         // We have a query callback set, we are passing on responsibility for displaying/filtering results, to Lua
-        LuaSkin *skin = [LuaSkin sharedWithState:NULL];
-        _lua_stackguard_entry(skin.L);
-        [skin pushLuaRef:self.refTable ref:self.queryChangedCallbackRef];
-        [skin pushNSObject:queryString];
-        [skin protectedCallAndError:@"hs.chooser:queryChangedCallback" nargs:1 nresults:0];
-        _lua_stackguard_exit(skin.L);
+        if (self.queryDebounceInterval > 0) {
+            // Debouncing is enabled, invalidate existing timer and create new one
+            [self.queryDebounceTimer invalidate];
+            self.queryDebounceTimer = [NSTimer scheduledTimerWithTimeInterval:self.queryDebounceInterval
+                                                                       target:self
+                                                                     selector:@selector(fireQueryCallback:)
+                                                                     userInfo:queryString
+                                                                      repeats:NO];
+        } else {
+            // No debouncing, fire callback immediately
+            LuaSkin *skin = [LuaSkin sharedWithState:NULL];
+            _lua_stackguard_entry(skin.L);
+            [skin pushLuaRef:self.refTable ref:self.queryChangedCallbackRef];
+            [skin pushNSObject:queryString];
+            [skin protectedCallAndError:@"hs.chooser:queryChangedCallback" nargs:1 nresults:0];
+            _lua_stackguard_exit(skin.L);
+        }
     } else {
         // We do not have a query callback set, so we are doing the filtering
+        // Built-in filtering always happens immediately (no debounce)
         if (queryString.length > 0) {
             NSMutableArray *filteredChoices = [[NSMutableArray alloc] init];
             NSString *lowercaseQuery = [queryString lowercaseString];
@@ -539,6 +556,16 @@
         }
         [self.choicesTableView reloadData];
     }
+}
+
+- (void)fireQueryCallback:(NSTimer *)timer {
+    NSString *queryString = timer.userInfo;
+    LuaSkin *skin = [LuaSkin sharedWithState:NULL];
+    _lua_stackguard_entry(skin.L);
+    [skin pushLuaRef:self.refTable ref:self.queryChangedCallbackRef];
+    [skin pushNSObject:queryString];
+    [skin protectedCallAndError:@"hs.chooser:queryChangedCallback" nargs:1 nresults:0];
+    _lua_stackguard_exit(skin.L);
 }
 
 - (void)selectChoice:(NSInteger)row {
