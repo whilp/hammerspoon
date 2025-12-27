@@ -42,6 +42,7 @@
         self.currentStaticChoices = nil;
         self.currentCallbackChoices = nil;
         self.filteredChoices = nil;
+        self.lowercaseSearchIndex = nil;
         self.enableDefaultForQuery = NO;
 
         self.hideCallbackRef = LUA_NOREF;
@@ -93,7 +94,9 @@
     __weak id _window = self.window;
 
     if (self.reloadWhenVisible) {
+        self.cachedChoicesForReload = [self getChoices];
         [self.choicesTableView reloadData];
+        self.cachedChoicesForReload = nil;
         self.reloadWhenVisible = NO;
     }
 
@@ -365,7 +368,7 @@
 
 - (NSInteger) numberOfRowsInTableView:(NSTableView *)tableView {
     NSInteger rowCount = 0;
-    NSArray *choices = [self getChoices];
+    NSArray *choices = self.cachedChoicesForReload ?: [self getChoices];
 
     if (choices) {
         rowCount = choices.count;
@@ -375,7 +378,7 @@
 }
 
 - (NSView *)tableView:(NSTableView *)tableView viewForTableColumn:(NSTableColumn *)tableColumn row:(NSInteger)row {
-    NSArray *choices = [self getChoices];
+    NSArray *choices = self.cachedChoicesForReload ?: [self getChoices];
     NSDictionary *choice = [choices objectAtIndex:row];
 
     id text                = [choice objectForKey:@"text"];
@@ -533,19 +536,33 @@
         if (queryString.length > 0) {
             NSMutableArray *filteredChoices = [[NSMutableArray alloc] init];
             NSString *lowercaseQuery = [queryString lowercaseString];
+            NSArray *choices = [self getChoicesWithOptions:NO];
 
-            for (NSDictionary *choice in [self getChoicesWithOptions:NO]) {
-                NSString *text = [choice objectForKey:@"text"];
-                if (text && ![text isKindOfClass:[NSString class]]) text = [NSString stringWithFormat:@"%@", text];
-                if (!text) text = @"";
-                if ([[text lowercaseString] containsString:lowercaseQuery]) {
-                    [filteredChoices addObject:choice];
-                } else if (self.searchSubText) {
-                    NSString *subText = [choice objectForKey:@"subText"];
-                    if (subText && ![subText isKindOfClass:[NSString class]]) subText = [NSString stringWithFormat:@"%@", subText];
-                    if (!subText) subText = @"";
-                    if ([[subText lowercaseString] containsString:lowercaseQuery]) {
+            if (self.lowercaseSearchIndex && self.lowercaseSearchIndex.count == choices.count) {
+                // Use pre-computed lowercase index for faster filtering
+                for (NSUInteger i = 0; i < choices.count; i++) {
+                    NSDictionary *indexEntry = self.lowercaseSearchIndex[i];
+                    if ([indexEntry[@"text"] containsString:lowercaseQuery]) {
+                        [filteredChoices addObject:choices[i]];
+                    } else if (self.searchSubText && [indexEntry[@"subText"] containsString:lowercaseQuery]) {
+                        [filteredChoices addObject:choices[i]];
+                    }
+                }
+            } else {
+                // Fallback to original method if index is not available or out of sync
+                for (NSDictionary *choice in choices) {
+                    NSString *text = [choice objectForKey:@"text"];
+                    if (text && ![text isKindOfClass:[NSString class]]) text = [NSString stringWithFormat:@"%@", text];
+                    if (!text) text = @"";
+                    if ([[text lowercaseString] containsString:lowercaseQuery]) {
                         [filteredChoices addObject:choice];
+                    } else if (self.searchSubText) {
+                        NSString *subText = [choice objectForKey:@"subText"];
+                        if (subText && ![subText isKindOfClass:[NSString class]]) subText = [NSString stringWithFormat:@"%@", subText];
+                        if (!subText) subText = @"";
+                        if ([[subText lowercaseString] containsString:lowercaseQuery]) {
+                            [filteredChoices addObject:choice];
+                        }
                     }
                 }
             }
@@ -554,7 +571,9 @@
         } else {
             self.filteredChoices = nil;
         }
+        self.cachedChoicesForReload = [self getChoices];
         [self.choicesTableView reloadData];
+        self.cachedChoicesForReload = nil;
     }
 }
 
@@ -623,7 +642,9 @@
 
 - (void)updateChoices {
     if (self.window.visible) {
+        self.cachedChoicesForReload = [self getChoices];
         [self.choicesTableView reloadData];
+        self.cachedChoicesForReload = nil;
     } else {
         self.reloadWhenVisible = YES;
     }
@@ -633,6 +654,7 @@
     self.currentStaticChoices = nil;
     self.currentCallbackChoices = nil;
     self.filteredChoices = nil;
+    self.lowercaseSearchIndex = nil;
 }
 
 - (void)clearChoicesAndUpdate {
@@ -677,6 +699,8 @@
                     // Light verification of the callback choices shows the format is wrong, so let's ignore it
                     [LuaSkin logError:@"ERROR: data returned by hs.chooser:choices() callback could not be parsed correctly"];
                     self.currentCallbackChoices = nil;
+                } else {
+                    [self buildSearchIndex];
                 }
             } else {
                 [skin logError:[NSString stringWithFormat:@"%s:choices error - %@", USERDATA_TAG, [skin toNSObjectAtIndex:-1]]] ;
@@ -693,6 +717,31 @@
 
     //NSLog(@"HSChooser::getChoicesWithOptions: returning: %@", choices);
     return choices;
+}
+
+- (void)buildSearchIndex {
+    NSArray *choices = [self getChoicesWithOptions:NO];
+    if (!choices) {
+        self.lowercaseSearchIndex = nil;
+        return;
+    }
+
+    NSMutableArray *index = [NSMutableArray arrayWithCapacity:choices.count];
+    for (NSDictionary *choice in choices) {
+        NSString *text = [choice objectForKey:@"text"];
+        if (text && ![text isKindOfClass:[NSString class]]) text = [NSString stringWithFormat:@"%@", text];
+        if (!text) text = @"";
+
+        NSString *subText = [choice objectForKey:@"subText"];
+        if (subText && ![subText isKindOfClass:[NSString class]]) subText = [NSString stringWithFormat:@"%@", subText];
+        if (!subText) subText = @"";
+
+        [index addObject:@{
+            @"text": [text lowercaseString],
+            @"subText": [subText lowercaseString]
+        }];
+    }
+    self.lowercaseSearchIndex = index;
 }
 
 #pragma mark - UI customisation methods

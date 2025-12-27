@@ -54,6 +54,8 @@
 @property(nonatomic, retain) NSArray *currentStaticChoices;
 @property(nonatomic, retain) NSArray *currentCallbackChoices;
 @property(nonatomic, retain) NSArray *filteredChoices;
+@property(nonatomic, retain) NSArray *lowercaseSearchIndex;
+@property(nonatomic, retain) NSArray *cachedChoicesForReload;
 
 // Lua callback references
 @property(nonatomic) int hideCallbackRef;
@@ -106,6 +108,7 @@
 - (void)clearChoicesAndUpdate;
 - (NSArray *)getChoices;
 - (NSArray *)getChoicesWithOptions:(BOOL)includeFiltered;
+- (void)buildSearchIndex;
 
 // UI customisation methods
 - (void)setBgLightDark:(NSNotification *)notification;

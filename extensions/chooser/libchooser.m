@@ -182,6 +182,8 @@ static int chooserSetChoices(lua_State *L) {
             if (!staticChoicesTypeCheckPass) {
                 [skin logError:@"hs.chooser:choices() table could not be parsed correctly."];
                 chooser.currentStaticChoices = nil;
+            } else {
+                [chooser buildSearchIndex];
             }
             break;
 
