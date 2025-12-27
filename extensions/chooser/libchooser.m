@@ -842,6 +842,44 @@ static int chooserSetNumRows(lua_State *L) {
     return 1;
 }
 
+/// hs.chooser:initialSelectedRow([row]) -> hs.chooser object or number
+/// Method
+/// Gets/Sets the row to select when the chooser is shown
+///
+/// Parameters:
+///  * row - An optional integer specifying the row to select (1-indexed). If this parameter is omitted, the current value will be returned. Set to 0 to disable (default behavior selects first row).
+///
+/// Returns:
+///  * The `hs.chooser` object if a value was set, or a number if no parameter was passed
+///
+/// Notes:
+///  * This should be called before `show()` to ensure the row is selected immediately when the chooser appears
+///  * Unlike `selectedRow()`, this setting persists and is applied each time the chooser is shown or choices are filtered
+static int chooserSetInitialSelectedRow(lua_State *L) {
+    LuaSkin *skin = [LuaSkin sharedWithState:L];
+    [skin checkArgs:LS_TUSERDATA, USERDATA_TAG, LS_TNUMBER | LS_TINTEGER | LS_TOPTIONAL, LS_TBREAK];
+
+    HSChooser *chooser = [skin toNSObjectAtIndex:1];
+
+    switch (lua_type(L, 2)) {
+        case LUA_TNUMBER:
+            chooser.initialSelectedRow = (NSInteger)lua_tointeger(L, 2);
+            lua_pushvalue(L, 1);
+            break;
+
+        case LUA_TNONE:
+            lua_pushinteger(L, chooser.initialSelectedRow);
+            break;
+
+        default:
+            NSLog(@"ERROR: Unknown type passed to hs.chooser:initialSelectedRow(). This should not be possible");
+            lua_pushnil(L);
+            break;
+    }
+
+    return 1;
+}
+
 /// hs.chooser:selectedRow([row]) -> number
 /// Method
 /// Get or set the currently selected row
@@ -1056,6 +1094,7 @@ static const luaL_Reg userdataLib[] = {
     {"enableDefaultForQuery", chooserSetEnableDefaultForQuery},
     {"width", chooserSetWidth},
     {"rows", chooserSetNumRows},
+    {"initialSelectedRow", chooserSetInitialSelectedRow},
 
     {"__tostring", userdata_tostring},
     {"__eq", userdata_eq},

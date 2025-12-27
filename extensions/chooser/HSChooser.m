@@ -31,6 +31,7 @@
         self.searchSubText = NO;
         self.showShortcuts = YES;
         self.showImages = YES;
+        self.initialSelectedRow = 0;
         self.queryDebounceInterval = 0;
         self.queryDebounceTimer = nil;
 
@@ -574,6 +575,15 @@
         self.cachedChoicesForReload = [self getChoices];
         [self.choicesTableView reloadData];
         self.cachedChoicesForReload = nil;
+
+        // Apply initial row selection after reload
+        if (self.initialSelectedRow > 0) {
+            NSInteger maxRow = self.choicesTableView.numberOfRows - 1;
+            NSInteger row = self.initialSelectedRow - 1;  // Convert from 1-indexed Lua to 0-indexed
+            row = (row < 0) ? 0 : ((row > maxRow) ? maxRow : row);
+            [self.choicesTableView selectRowIndexes:[NSIndexSet indexSetWithIndex:row] byExtendingSelection:NO];
+            [self.choicesTableView scrollRowToVisible:row];
+        }
     }
 }
 

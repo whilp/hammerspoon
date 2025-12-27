@@ -35,6 +35,7 @@
 @property(nonatomic) BOOL enableDefaultForQuery;
 @property(nonatomic) BOOL showShortcuts;
 @property(nonatomic) BOOL showImages;
+@property(nonatomic) NSInteger initialSelectedRow;
 @property(nonatomic) NSTimeInterval queryDebounceInterval;
 @property(nonatomic, strong) NSTimer *queryDebounceTimer;
 
