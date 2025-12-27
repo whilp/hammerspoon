@@ -41,9 +41,9 @@
                             <box verticalHuggingPriority="750" boxType="separator" translatesAutoresizingMaskIntoConstraints="NO" id="6rA-6M-we2">
                                 <rect key="frame" x="0.0" y="92" width="529" height="5"/>
                             </box>
-                            <scrollView borderType="none" autohidesScrollers="YES" horizontalLineScroll="42" horizontalPageScroll="10" verticalLineScroll="42" verticalPageScroll="10" usesPredominantAxisScrolling="NO" translatesAutoresizingMaskIntoConstraints="NO" id="F4h-Cy-3Ua">
+                            <scrollView borderType="none" autohidesScrollers="YES" horizontalLineScroll="42" horizontalPageScroll="10" verticalLineScroll="42" verticalPageScroll="10" usesPredominantAxisScrolling="YES" translatesAutoresizingMaskIntoConstraints="NO" id="F4h-Cy-3Ua">
                                 <rect key="frame" x="5" y="5" width="519" height="84"/>
-                                <clipView key="contentView" drawsBackground="NO" copiesOnScroll="NO" id="Ujw-G9-DZG">
+                                <clipView key="contentView" drawsBackground="NO" id="Ujw-G9-DZG">
                                     <rect key="frame" x="0.0" y="0.0" width="519" height="84"/>
                                     <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                     <subviews>
