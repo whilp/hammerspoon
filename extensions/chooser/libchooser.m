@@ -182,6 +182,8 @@ static int chooserSetChoices(lua_State *L) {
             if (!staticChoicesTypeCheckPass) {
                 [skin logError:@"hs.chooser:choices() table could not be parsed correctly."];
                 chooser.currentStaticChoices = nil;
+            } else {
+                [chooser buildSearchIndex];
             }
             break;
 
@@ -618,6 +620,45 @@ static int chooserSetEnableDefaultForQuery(lua_State *L) {
     return 1;
 }
 
+/// hs.chooser:queryDebounce([seconds]) -> hs.chooser object or number
+/// Method
+/// Gets/Sets the debounce interval for the query changed callback
+///
+/// Parameters:
+///  * seconds - An optional number indicating the debounce interval in seconds. If this parameter is omitted, the current interval will be returned. Set to 0 to disable debouncing (default behavior).
+///
+/// Returns:
+///  * The `hs.chooser` object if a value was set, or a number if no parameter was passed
+///
+/// Notes:
+///  * This only affects the `queryChangedCallback`. When debouncing is enabled, the callback will only fire after the user stops typing for the specified interval.
+///  * Built-in filtering (when no queryChangedCallback is set) always happens immediately and is not affected by this setting.
+///  * Default is 0 (no debouncing - callback fires on every keystroke).
+static int chooserSetQueryDebounce(lua_State *L) {
+    LuaSkin *skin = [LuaSkin sharedWithState:L];
+    [skin checkArgs:LS_TUSERDATA, USERDATA_TAG, LS_TNUMBER | LS_TOPTIONAL, LS_TBREAK];
+
+    HSChooser *chooser = [skin toNSObjectAtIndex:1];
+
+    switch (lua_type(L, 2)) {
+        case LUA_TNUMBER:
+            chooser.queryDebounceInterval = (NSTimeInterval)lua_tonumber(L, 2);
+            lua_pushvalue(L, 1);
+            break;
+
+        case LUA_TNONE:
+            lua_pushnumber(L, chooser.queryDebounceInterval);
+            return 1;
+
+        default:
+            NSLog(@"ERROR: Unknown type passed to hs.chooser:queryDebounce(). This should not be possible");
+            lua_pushnil(L);
+            break;
+    }
+
+    return 1;
+}
+
 /// hs.chooser:searchSubText([searchSubText]) -> hs.chooser object or boolean
 /// Method
 /// Gets/Sets whether the chooser should search in the sub-text of each item
@@ -648,6 +689,81 @@ static int chooserSetSearchSubText(lua_State *L) {
 
         default:
             NSLog(@"ERROR: Unknown type passed to hs.chooser:searchSubText(). This should not be possible");
+            lua_pushnil(L);
+            break;
+    }
+
+    return 1;
+}
+
+/// hs.chooser:showImages([showImages]) -> hs.chooser object or boolean
+/// Method
+/// Gets/Sets whether the chooser should show the image column
+///
+/// Parameters:
+///  * showImages - An optional boolean, true to show images, false to hide the image column. If this parameter is omitted, the current configuration value will be returned
+///
+/// Returns:
+///  * The `hs.chooser` object if a value was set, or a boolean if no parameter was passed
+///
+/// Notes:
+///  * This should be used before a chooser has been displayed
+static int chooserSetShowImages(lua_State *L) {
+    LuaSkin *skin = [LuaSkin sharedWithState:L];
+    [skin checkArgs:LS_TUSERDATA, USERDATA_TAG, LS_TBOOLEAN | LS_TOPTIONAL, LS_TBREAK];
+
+    HSChooser *chooser = [skin toNSObjectAtIndex:1];
+
+    switch (lua_type(L, 2)) {
+        case LUA_TBOOLEAN:
+            chooser.showImages = lua_toboolean(L, 2);
+            lua_pushvalue(L, 1);
+            break;
+
+        case LUA_TNONE:
+            lua_pushboolean(L, chooser.showImages);
+            return 1;
+
+        default:
+            NSLog(@"ERROR: Unknown type passed to hs.chooser:showImages(). This should not be possible");
+            lua_pushnil(L);
+            break;
+    }
+
+    return 1;
+}
+
+/// hs.chooser:showShortcuts([showShortcuts]) -> hs.chooser object or boolean
+/// Method
+/// Gets/Sets whether the chooser should show keyboard shortcuts (⌘1-9) in the UI and enable the shortcuts
+///
+/// Parameters:
+///  * showShortcuts - An optional boolean, true to show shortcuts and enable keyboard shortcuts, false to hide them. If this parameter is omitted, the current configuration value will be returned
+///
+/// Returns:
+///  * The `hs.chooser` object if a value was set, or a boolean if no parameter was passed
+///
+/// Notes:
+///  * This should be used before a chooser has been displayed
+///  * When set to false, both the visual shortcut indicators (⌘1-9) and the keyboard shortcuts themselves are disabled
+static int chooserSetShowShortcuts(lua_State *L) {
+    LuaSkin *skin = [LuaSkin sharedWithState:L];
+    [skin checkArgs:LS_TUSERDATA, USERDATA_TAG, LS_TBOOLEAN | LS_TOPTIONAL, LS_TBREAK];
+
+    HSChooser *chooser = [skin toNSObjectAtIndex:1];
+
+    switch (lua_type(L, 2)) {
+        case LUA_TBOOLEAN:
+            chooser.showShortcuts = lua_toboolean(L, 2);
+            lua_pushvalue(L, 1);
+            break;
+
+        case LUA_TNONE:
+            lua_pushboolean(L, chooser.showShortcuts);
+            return 1;
+
+        default:
+            NSLog(@"ERROR: Unknown type passed to hs.chooser:showShortcuts(). This should not be possible");
             lua_pushnil(L);
             break;
     }
@@ -719,6 +835,44 @@ static int chooserSetNumRows(lua_State *L) {
 
         default:
             NSLog(@"ERROR: Unknown type passed to hs.chooser:rows(). This should not be possible");
+            lua_pushnil(L);
+            break;
+    }
+
+    return 1;
+}
+
+/// hs.chooser:initialSelectedRow([row]) -> hs.chooser object or number
+/// Method
+/// Gets/Sets the row to select when the chooser is shown
+///
+/// Parameters:
+///  * row - An optional integer specifying the row to select (1-indexed). If this parameter is omitted, the current value will be returned. Set to 0 to disable (default behavior selects first row).
+///
+/// Returns:
+///  * The `hs.chooser` object if a value was set, or a number if no parameter was passed
+///
+/// Notes:
+///  * This should be called before `show()` to ensure the row is selected immediately when the chooser appears
+///  * Unlike `selectedRow()`, this setting persists and is applied each time the chooser is shown or choices are filtered
+static int chooserSetInitialSelectedRow(lua_State *L) {
+    LuaSkin *skin = [LuaSkin sharedWithState:L];
+    [skin checkArgs:LS_TUSERDATA, USERDATA_TAG, LS_TNUMBER | LS_TINTEGER | LS_TOPTIONAL, LS_TBREAK];
+
+    HSChooser *chooser = [skin toNSObjectAtIndex:1];
+
+    switch (lua_type(L, 2)) {
+        case LUA_TNUMBER:
+            chooser.initialSelectedRow = (NSInteger)lua_tointeger(L, 2);
+            lua_pushvalue(L, 1);
+            break;
+
+        case LUA_TNONE:
+            lua_pushinteger(L, chooser.initialSelectedRow);
+            break;
+
+        default:
+            NSLog(@"ERROR: Unknown type passed to hs.chooser:initialSelectedRow(). This should not be possible");
             lua_pushnil(L);
             break;
     }
@@ -877,6 +1031,9 @@ static int userdata_gc(lua_State* L) {
     if (chooser) {
         chooser.selfRefCount--;
         if (chooser.selfRefCount == 0) {
+            [chooser.queryDebounceTimer invalidate];
+            chooser.queryDebounceTimer = nil;
+
             chooser.hideCallbackRef = [skin luaUnref:refTable ref:chooser.hideCallbackRef];
             chooser.showCallbackRef = [skin luaUnref:refTable ref:chooser.showCallbackRef];
             chooser.choicesCallbackRef = [skin luaUnref:refTable ref:chooser.choicesCallbackRef];
@@ -917,6 +1074,7 @@ static const luaL_Reg userdataLib[] = {
     {"hideCallback", chooserHideCallback},
     {"showCallback", chooserShowCallback},
     {"queryChangedCallback", chooserQueryCallback},
+    {"queryDebounce", chooserSetQueryDebounce},
     {"query", chooserSetQuery},
     {"delete", chooserDelete},
     {"refreshChoicesCallback", chooserRefreshChoicesCallback},
@@ -931,9 +1089,12 @@ static const luaL_Reg userdataLib[] = {
     {"bgDark", chooserSetBgDark},
     {"placeholderText", chooserPlaceholder},
     {"searchSubText", chooserSetSearchSubText},
+    {"showImages", chooserSetShowImages},
+    {"showShortcuts", chooserSetShowShortcuts},
     {"enableDefaultForQuery", chooserSetEnableDefaultForQuery},
     {"width", chooserSetWidth},
     {"rows", chooserSetNumRows},
+    {"initialSelectedRow", chooserSetInitialSelectedRow},
 
     {"__tostring", userdata_tostring},
     {"__eq", userdata_eq},

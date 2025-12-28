@@ -29,6 +29,11 @@
         self.fontName = nil;
         self.fontSize = 0;
         self.searchSubText = NO;
+        self.showShortcuts = YES;
+        self.showImages = YES;
+        self.initialSelectedRow = 0;
+        self.queryDebounceInterval = 0;
+        self.queryDebounceTimer = nil;
 
         // We're setting these directly, because we've overridden the setters and we don't need to invoke those now
         _fgColor = nil;
@@ -38,6 +43,7 @@
         self.currentStaticChoices = nil;
         self.currentCallbackChoices = nil;
         self.filteredChoices = nil;
+        self.lowercaseSearchIndex = nil;
         self.enableDefaultForQuery = NO;
 
         self.hideCallbackRef = LUA_NOREF;
@@ -57,6 +63,9 @@
         } else {
             self.font = [NSFont fontWithName:self.fontName size:self.fontSize];
         }
+
+        // Cache the default placeholder image
+        self.defaultImage = [NSImage imageNamed:NSImageNameFollowLinkFreestandingTemplate];
 
         [self calculateRects];
 
@@ -81,39 +90,86 @@
 }
 
 - (void)windowDidBecomeKey:(NSNotification *)notification {
-    __weak id _self = self;
+    __weak HSChooser *_self = self;
     __weak id _tableView = self.choicesTableView;
     __weak id _window = self.window;
 
     if (self.reloadWhenVisible) {
+        self.cachedChoicesForReload = [self getChoices];
         [self.choicesTableView reloadData];
+        self.cachedChoicesForReload = nil;
         self.reloadWhenVisible = NO;
     }
 
-    [self addShortcut:@"1" keyCode:-1 mods:NSEventModifierFlagCommand handler:^{ [_self tableView:_tableView didClickedRow:0]; }];
-    [self addShortcut:@"2" keyCode:-1 mods:NSEventModifierFlagCommand handler:^{ [_self tableView:_tableView didClickedRow:1]; }];
-    [self addShortcut:@"3" keyCode:-1 mods:NSEventModifierFlagCommand handler:^{ [_self tableView:_tableView didClickedRow:2]; }];
-    [self addShortcut:@"4" keyCode:-1 mods:NSEventModifierFlagCommand handler:^{ [_self tableView:_tableView didClickedRow:3]; }];
-    [self addShortcut:@"5" keyCode:-1 mods:NSEventModifierFlagCommand handler:^{ [_self tableView:_tableView didClickedRow:4]; }];
-    [self addShortcut:@"6" keyCode:-1 mods:NSEventModifierFlagCommand handler:^{ [_self tableView:_tableView didClickedRow:5]; }];
-    [self addShortcut:@"7" keyCode:-1 mods:NSEventModifierFlagCommand handler:^{ [_self tableView:_tableView didClickedRow:6]; }];
-    [self addShortcut:@"8" keyCode:-1 mods:NSEventModifierFlagCommand handler:^{ [_self tableView:_tableView didClickedRow:7]; }];
-    [self addShortcut:@"9" keyCode:-1 mods:NSEventModifierFlagCommand handler:^{ [_self tableView:_tableView didClickedRow:8]; }];
-    [self addShortcut:@"0" keyCode:-1 mods:NSEventModifierFlagCommand handler:^{ [_self tableView:_tableView didClickedRow:9]; }];
+    NSMutableDictionary *handlers = [NSMutableDictionary dictionary];
 
-    [self addShortcut:@"Escape" keyCode:27 mods:0 handler:^{ [_window resignKeyWindow]; }];
+    if (self.showShortcuts) {
+        [handlers addEntriesFromDictionary:@{
+            [self keyForModifiers:NSEventModifierFlagCommand character:@"1"]: ^{ [_self tableView:_tableView didClickedRow:0]; },
+            [self keyForModifiers:NSEventModifierFlagCommand character:@"2"]: ^{ [_self tableView:_tableView didClickedRow:1]; },
+            [self keyForModifiers:NSEventModifierFlagCommand character:@"3"]: ^{ [_self tableView:_tableView didClickedRow:2]; },
+            [self keyForModifiers:NSEventModifierFlagCommand character:@"4"]: ^{ [_self tableView:_tableView didClickedRow:3]; },
+            [self keyForModifiers:NSEventModifierFlagCommand character:@"5"]: ^{ [_self tableView:_tableView didClickedRow:4]; },
+            [self keyForModifiers:NSEventModifierFlagCommand character:@"6"]: ^{ [_self tableView:_tableView didClickedRow:5]; },
+            [self keyForModifiers:NSEventModifierFlagCommand character:@"7"]: ^{ [_self tableView:_tableView didClickedRow:6]; },
+            [self keyForModifiers:NSEventModifierFlagCommand character:@"8"]: ^{ [_self tableView:_tableView didClickedRow:7]; },
+            [self keyForModifiers:NSEventModifierFlagCommand character:@"9"]: ^{ [_self tableView:_tableView didClickedRow:8]; },
+            [self keyForModifiers:NSEventModifierFlagCommand character:@"0"]: ^{ [_self tableView:_tableView didClickedRow:9]; }
+        }];
+    }
 
-    [self addShortcut:@"Up" keyCode:NSUpArrowFunctionKey mods:NSEventModifierFlagFunction|NSEventModifierFlagNumericPad handler:^{ [_self selectPreviousChoice]; }];
-    [self addShortcut:@"Down" keyCode:NSDownArrowFunctionKey mods:NSEventModifierFlagFunction|NSEventModifierFlagNumericPad handler:^{ [_self selectNextChoice]; }];
-    [self addShortcut:@"p" keyCode:-1 mods:NSEventModifierFlagControl handler:^{ [_self selectPreviousChoice]; }];
-    [self addShortcut:@"n" keyCode:-1 mods:NSEventModifierFlagControl handler:^{ [_self selectNextChoice]; }];
+    [handlers addEntriesFromDictionary:@{
+        [self keyForModifiers:0 keyCode:27]: ^{ [_window resignKeyWindow]; },
 
-    [self addShortcut:@"PageUp" keyCode:NSPageUpFunctionKey mods:NSEventModifierFlagFunction handler:^{ [_self selectPreviousPage]; }];
-    [self addShortcut:@"PageDown" keyCode:NSPageDownFunctionKey mods:NSEventModifierFlagFunction handler:^{ [_self selectNextPage]; }];
-    [self addShortcut:@"v" keyCode:-1 mods:NSEventModifierFlagControl handler:^{ [_self selectNextPage]; }];
+        [self keyForModifiers:NSEventModifierFlagFunction|NSEventModifierFlagNumericPad keyCode:NSUpArrowFunctionKey]: ^{ [_self selectPreviousChoice]; },
+        [self keyForModifiers:NSEventModifierFlagFunction|NSEventModifierFlagNumericPad keyCode:NSDownArrowFunctionKey]: ^{ [_self selectNextChoice]; },
+        [self keyForModifiers:NSEventModifierFlagControl character:@"p"]: ^{ [_self selectPreviousChoice]; },
+        [self keyForModifiers:NSEventModifierFlagControl character:@"n"]: ^{ [_self selectNextChoice]; },
+
+        [self keyForModifiers:NSEventModifierFlagFunction keyCode:NSPageUpFunctionKey]: ^{ [_self selectPreviousPage]; },
+        [self keyForModifiers:NSEventModifierFlagFunction keyCode:NSPageDownFunctionKey]: ^{ [_self selectNextPage]; },
+        [self keyForModifiers:NSEventModifierFlagControl character:@"v"]: ^{ [_self selectNextPage]; }
+    }];
+
+    self.keyboardHandlers = handlers;
+
+    self.keyboardMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown handler:^NSEvent*(NSEvent* event) {
+        NSEventModifierFlags flags = ([event modifierFlags] & NSEventModifierFlagDeviceIndependentFlagsMask);
+        NSString *lookupKey = nil;
+        dispatch_block_t handler = nil;
+
+        @try {
+            NSString *characters = [event charactersIgnoringModifiers];
+            if (characters.length > 0) {
+                unichar keyChar = [characters characterAtIndex:0];
+
+                lookupKey = [_self keyForModifiers:flags keyCode:keyChar];
+                handler = [_self.keyboardHandlers objectForKey:lookupKey];
+
+                if (!handler) {
+                    lookupKey = [_self keyForModifiers:flags character:characters];
+                    handler = [_self.keyboardHandlers objectForKey:lookupKey];
+                }
+            }
+
+            if (handler) {
+                handler();
+                return nil;
+            }
+        } @catch (NSException *exception) {
+            ;
+        }
+
+        return event;
+    }];
 }
 
 - (void)windowDidResignKey:(NSNotification *)notification {
+    if (self.keyboardMonitor) {
+        [NSEvent removeMonitor:self.keyboardMonitor];
+        self.keyboardMonitor = nil;
+    }
+
     for (id monitor in self.eventMonitors) {
         [NSEvent removeMonitor:monitor];
     }
@@ -241,6 +297,13 @@
         [skin protectedCallAndError:@"hs.chooser.globalCallback willOpen" nargs:2 nresults:0];
     }
 
+    // Load data before showing window to avoid empty flash
+    [self controlTextDidChange:[NSNotification notificationWithName:@"Unused" object:nil]];
+
+    // Force immediate layout so selection is visible when window appears
+    [self.choicesTableView layoutSubtreeIfNeeded];
+    [self.window.contentView layoutSubtreeIfNeeded];
+
     [self resizeWindow];
 
     [self showWindow:self];
@@ -256,13 +319,6 @@
 
     [self.window setLevel:(CGWindowLevelForKey(kCGMainMenuWindowLevelKey) + 3)];
 
-    //if (!self.window.isKeyWindow) {
-    //    NSApplication *app = [NSApplication sharedApplication];
-    //    [app activateIgnoringOtherApps:YES];
-    //}
-
-    [self controlTextDidChange:[NSNotification notificationWithName:@"Unused" object:nil]];
-
     if (self.showCallbackRef != LUA_NOREF && self.showCallbackRef != LUA_REFNIL) {
         [skin pushLuaRef:self.refTable ref:self.showCallbackRef];
         [skin protectedCallAndError:@"hs.chooser:showCallback" nargs:0 nresults:0];
@@ -271,7 +327,15 @@
 }
 
 - (void)hide {
-    self.window.isVisible = NO;
+    [self.queryDebounceTimer invalidate];
+    self.queryDebounceTimer = nil;
+
+    // Move window off-screen immediately for instant visual feedback
+    [self.window setFrameOrigin:NSMakePoint(-10000, -10000)];
+    // Queue actual orderOut async to avoid blocking on window server
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self.window orderOut:nil];
+    });
 
     // Call hs.chooser.globalCallback("didClose")
     LuaSkin *skin = [LuaSkin sharedWithState:NULL];
@@ -310,7 +374,7 @@
 
 - (NSInteger) numberOfRowsInTableView:(NSTableView *)tableView {
     NSInteger rowCount = 0;
-    NSArray *choices = [self getChoices];
+    NSArray *choices = self.cachedChoicesForReload ?: [self getChoices];
 
     if (choices) {
         rowCount = choices.count;
@@ -320,7 +384,7 @@
 }
 
 - (NSView *)tableView:(NSTableView *)tableView viewForTableColumn:(NSTableColumn *)tableColumn row:(NSInteger)row {
-    NSArray *choices = [self getChoices];
+    NSArray *choices = self.cachedChoicesForReload ?: [self getChoices];
     NSDictionary *choice = [choices objectAtIndex:row];
 
     id text                = [choice objectForKey:@"text"];
@@ -335,12 +399,6 @@
         subText = [NSString stringWithFormat:@"%@", subText];
     }
     if (image && ![image isKindOfClass:[NSImage class]]) image = nil;
-
-    if (row >= 0 && row < 9) {
-        shortcutText = [NSString stringWithFormat:@"⌘%ld", (long)row + 1];
-    } else {
-        shortcutText = @"";
-    }
 
     NSString *chooserCellIdentifier = subText ?  @"HSChooserCellSubtext" : @"HSChooserCell";
     HSChooserCell *cellView = [tableView makeViewWithIdentifier:chooserCellIdentifier owner:self];
@@ -359,8 +417,15 @@
         }
     }
 
+    cellView.shortcutText.hidden = !self.showShortcuts;
+    if (self.showShortcuts && row >= 0 && row < 9) {
+        shortcutText = [NSString stringWithFormat:@"⌘%ld", (long)row + 1];
+    } else {
+        shortcutText = @"";
+    }
     cellView.shortcutText.stringValue = shortcutText ? shortcutText : @"??";
-    cellView.image.image = image ? image : [NSImage imageNamed:NSImageNameFollowLinkFreestandingTemplate];
+    cellView.image.hidden = !self.showImages;
+    cellView.image.image = self.showImages ? (image ? image : self.defaultImage) : nil;
 
     if (self.fgColor) {
         cellView.text.textColor = self.fgColor;
@@ -454,29 +519,56 @@
 
     if (self.queryChangedCallbackRef != LUA_NOREF && self.queryChangedCallbackRef != LUA_REFNIL) {
         // We have a query callback set, we are passing on responsibility for displaying/filtering results, to Lua
-        LuaSkin *skin = [LuaSkin sharedWithState:NULL];
-        _lua_stackguard_entry(skin.L);
-        [skin pushLuaRef:self.refTable ref:self.queryChangedCallbackRef];
-        [skin pushNSObject:queryString];
-        [skin protectedCallAndError:@"hs.chooser:queryChangedCallback" nargs:1 nresults:0];
-        _lua_stackguard_exit(skin.L);
+        if (self.queryDebounceInterval > 0) {
+            // Debouncing is enabled, invalidate existing timer and create new one
+            [self.queryDebounceTimer invalidate];
+            self.queryDebounceTimer = [NSTimer scheduledTimerWithTimeInterval:self.queryDebounceInterval
+                                                                       target:self
+                                                                     selector:@selector(fireQueryCallback:)
+                                                                     userInfo:queryString
+                                                                      repeats:NO];
+        } else {
+            // No debouncing, fire callback immediately
+            LuaSkin *skin = [LuaSkin sharedWithState:NULL];
+            _lua_stackguard_entry(skin.L);
+            [skin pushLuaRef:self.refTable ref:self.queryChangedCallbackRef];
+            [skin pushNSObject:queryString];
+            [skin protectedCallAndError:@"hs.chooser:queryChangedCallback" nargs:1 nresults:0];
+            _lua_stackguard_exit(skin.L);
+        }
     } else {
         // We do not have a query callback set, so we are doing the filtering
+        // Built-in filtering always happens immediately (no debounce)
         if (queryString.length > 0) {
             NSMutableArray *filteredChoices = [[NSMutableArray alloc] init];
+            NSString *lowercaseQuery = [queryString lowercaseString];
+            NSArray *choices = [self getChoicesWithOptions:NO];
 
-            for (NSDictionary *choice in [self getChoicesWithOptions:NO]) {
-                NSString *text = [choice objectForKey:@"text"];
-                if (text && ![text isKindOfClass:[NSString class]]) text = [NSString stringWithFormat:@"%@", text] ;
-                if (!text) text = @"" ;
-                if ([[text lowercaseString] containsString:[queryString lowercaseString]]) {
-                    [filteredChoices addObject: choice];
-                } else if (self.searchSubText) {
-                    NSString *subText = [choice objectForKey:@"subText"];
-                    if (subText && ![subText isKindOfClass:[NSString class]]) subText = [NSString stringWithFormat:@"%@", subText] ;
-                    if (!subText) subText = @"" ;
-                    if ([[subText lowercaseString] containsString:[queryString lowercaseString]]) {
+            if (self.lowercaseSearchIndex && self.lowercaseSearchIndex.count == choices.count) {
+                // Use pre-computed lowercase index for faster filtering
+                for (NSUInteger i = 0; i < choices.count; i++) {
+                    NSDictionary *indexEntry = self.lowercaseSearchIndex[i];
+                    if ([indexEntry[@"text"] containsString:lowercaseQuery]) {
+                        [filteredChoices addObject:choices[i]];
+                    } else if (self.searchSubText && [indexEntry[@"subText"] containsString:lowercaseQuery]) {
+                        [filteredChoices addObject:choices[i]];
+                    }
+                }
+            } else {
+                // Fallback to original method if index is not available or out of sync
+                for (NSDictionary *choice in choices) {
+                    NSString *text = [choice objectForKey:@"text"];
+                    if (text && ![text isKindOfClass:[NSString class]]) text = [NSString stringWithFormat:@"%@", text];
+                    if (!text) text = @"";
+                    if ([[text lowercaseString] containsString:lowercaseQuery]) {
                         [filteredChoices addObject:choice];
+                    } else if (self.searchSubText) {
+                        NSString *subText = [choice objectForKey:@"subText"];
+                        if (subText && ![subText isKindOfClass:[NSString class]]) subText = [NSString stringWithFormat:@"%@", subText];
+                        if (!subText) subText = @"";
+                        if ([[subText lowercaseString] containsString:lowercaseQuery]) {
+                            [filteredChoices addObject:choice];
+                        }
                     }
                 }
             }
@@ -485,8 +577,38 @@
         } else {
             self.filteredChoices = nil;
         }
+        self.cachedChoicesForReload = [self getChoices];
+
+        // Temporarily allow empty selection to prevent auto-select of row 0
+        BOOL wasAllowingEmpty = self.choicesTableView.allowsEmptySelection;
+        self.choicesTableView.allowsEmptySelection = YES;
         [self.choicesTableView reloadData];
+
+        // Select desired row without animation
+        NSInteger targetRow = (self.initialSelectedRow > 0) ? self.initialSelectedRow - 1 : 0;
+        NSInteger maxRow = self.choicesTableView.numberOfRows - 1;
+        if (maxRow >= 0) {
+            targetRow = (targetRow < 0) ? 0 : ((targetRow > maxRow) ? maxRow : targetRow);
+            [NSAnimationContext beginGrouping];
+            [[NSAnimationContext currentContext] setDuration:0];
+            [self.choicesTableView selectRowIndexes:[NSIndexSet indexSetWithIndex:targetRow] byExtendingSelection:NO];
+            [self.choicesTableView scrollRowToVisible:targetRow];
+            [NSAnimationContext endGrouping];
+        }
+
+        self.choicesTableView.allowsEmptySelection = wasAllowingEmpty;
+        self.cachedChoicesForReload = nil;
     }
+}
+
+- (void)fireQueryCallback:(NSTimer *)timer {
+    NSString *queryString = timer.userInfo;
+    LuaSkin *skin = [LuaSkin sharedWithState:NULL];
+    _lua_stackguard_entry(skin.L);
+    [skin pushLuaRef:self.refTable ref:self.queryChangedCallbackRef];
+    [skin pushNSObject:queryString];
+    [skin protectedCallAndError:@"hs.chooser:queryChangedCallback" nargs:1 nresults:0];
+    _lua_stackguard_exit(skin.L);
 }
 
 - (void)selectChoice:(NSInteger)row {
@@ -544,7 +666,9 @@
 
 - (void)updateChoices {
     if (self.window.visible) {
+        self.cachedChoicesForReload = [self getChoices];
         [self.choicesTableView reloadData];
+        self.cachedChoicesForReload = nil;
     } else {
         self.reloadWhenVisible = YES;
     }
@@ -554,6 +678,7 @@
     self.currentStaticChoices = nil;
     self.currentCallbackChoices = nil;
     self.filteredChoices = nil;
+    self.lowercaseSearchIndex = nil;
 }
 
 - (void)clearChoicesAndUpdate {
@@ -598,6 +723,8 @@
                     // Light verification of the callback choices shows the format is wrong, so let's ignore it
                     [LuaSkin logError:@"ERROR: data returned by hs.chooser:choices() callback could not be parsed correctly"];
                     self.currentCallbackChoices = nil;
+                } else {
+                    [self buildSearchIndex];
                 }
             } else {
                 [skin logError:[NSString stringWithFormat:@"%s:choices error - %@", USERDATA_TAG, [skin toNSObjectAtIndex:-1]]] ;
@@ -616,29 +743,54 @@
     return choices;
 }
 
+- (void)buildSearchIndex {
+    NSArray *choices = [self getChoicesWithOptions:NO];
+    if (!choices) {
+        self.lowercaseSearchIndex = nil;
+        return;
+    }
+
+    NSMutableArray *index = [NSMutableArray arrayWithCapacity:choices.count];
+    for (NSDictionary *choice in choices) {
+        NSString *text = [choice objectForKey:@"text"];
+        if (text && ![text isKindOfClass:[NSString class]]) text = [NSString stringWithFormat:@"%@", text];
+        if (!text) text = @"";
+
+        NSString *subText = [choice objectForKey:@"subText"];
+        if (subText && ![subText isKindOfClass:[NSString class]]) subText = [NSString stringWithFormat:@"%@", subText];
+        if (!subText) subText = @"";
+
+        [index addObject:@{
+            @"text": [text lowercaseString],
+            @"subText": [subText lowercaseString]
+        }];
+    }
+    self.lowercaseSearchIndex = index;
+}
+
 #pragma mark - UI customisation methods
 
 - (void)setFgColor:(NSColor *)fgColor {
     _fgColor = fgColor;
     self.queryField.textColor = _fgColor;
 
-    for (int x = 0; x < [self.choicesTableView numberOfRows]; x++) {
-        NSTableCellView *cellView = [self.choicesTableView viewAtColumn:0 row:x makeIfNecessary:NO];
+    [self.choicesTableView enumerateAvailableRowViewsUsingBlock:^(__kindof NSTableRowView *rowView, NSInteger row) {
+        NSTableCellView *cellView = [rowView viewAtColumn:0];
         NSTextField *text = [cellView viewWithTag:1];
         NSTextField *shortcutText = [cellView viewWithTag:2];
         text.textColor = _fgColor;
         shortcutText.textColor = _fgColor;
-    }
+    }];
 }
 
 - (void)setSubTextColor:(NSColor *)subTextColor {
     _subTextColor = subTextColor;
 
-    for (int x = 0; x < [self.choicesTableView numberOfRows]; x++) {
-        NSTableCellView *cellView = [self.choicesTableView viewAtColumn:0 row:x makeIfNecessary:NO];
+    [self.choicesTableView enumerateAvailableRowViewsUsingBlock:^(__kindof NSTableRowView *rowView, NSInteger row) {
+        NSTableCellView *cellView = [rowView viewAtColumn:0];
         NSTextField *subText = [cellView viewWithTag:3];
         subText.textColor = _subTextColor;
-    }
+    }];
 }
 
 - (void)applyDarkSetting:(BOOL)beDark {
@@ -669,6 +821,14 @@
 }
 
 #pragma mark - Utility methods
+
+- (NSString *)keyForModifiers:(NSEventModifierFlags)modifiers character:(NSString *)character {
+    return [NSString stringWithFormat:@"%lu:c:%@", (unsigned long)modifiers, character];
+}
+
+- (NSString *)keyForModifiers:(NSEventModifierFlags)modifiers keyCode:(unsigned short)keyCode {
+    return [NSString stringWithFormat:@"%lu:k:%u", (unsigned long)modifiers, keyCode];
+}
 
 - (void) addShortcut:(NSString*)key keyCode:(unsigned short)keyCode mods:(NSEventModifierFlags)mods handler:(dispatch_block_t)action {
     //NSLog(@"Adding shortcut for %lu %@:%i", mods, key, keyCode);

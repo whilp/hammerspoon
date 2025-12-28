@@ -21,6 +21,8 @@
 @property (nonatomic, weak) IBOutlet NSVisualEffectView *effectView;
 
 @property (nonatomic, strong) NSMutableArray *eventMonitors;
+@property (nonatomic, strong) NSDictionary *keyboardHandlers;
+@property (nonatomic, strong) id keyboardMonitor;
 @property (nonatomic) BOOL hasChosen;
 @property (nonatomic) BOOL reloadWhenVisible;
 
@@ -31,11 +33,17 @@
 @property(nonatomic) CGFloat fontSize;
 @property(nonatomic) BOOL searchSubText;
 @property(nonatomic) BOOL enableDefaultForQuery;
+@property(nonatomic) BOOL showShortcuts;
+@property(nonatomic) BOOL showImages;
+@property(nonatomic) NSInteger initialSelectedRow;
+@property(nonatomic) NSTimeInterval queryDebounceInterval;
+@property(nonatomic, strong) NSTimer *queryDebounceTimer;
 
 @property(nonatomic) NSColor *fgColor;
 @property(nonatomic) NSColor *subTextColor;
 
 @property(nonatomic, retain) NSFont *font;
+@property(nonatomic, retain) NSImage *defaultImage;
 
 // Size information we calculate for ourselves
 @property(nonatomic) NSRect winRect;
@@ -47,6 +55,8 @@
 @property(nonatomic, retain) NSArray *currentStaticChoices;
 @property(nonatomic, retain) NSArray *currentCallbackChoices;
 @property(nonatomic, retain) NSArray *filteredChoices;
+@property(nonatomic, retain) NSArray *lowercaseSearchIndex;
+@property(nonatomic, retain) NSArray *cachedChoicesForReload;
 
 // Lua callback references
 @property(nonatomic) int hideCallbackRef;
@@ -99,6 +109,7 @@
 - (void)clearChoicesAndUpdate;
 - (NSArray *)getChoices;
 - (NSArray *)getChoicesWithOptions:(BOOL)includeFiltered;
+- (void)buildSearchIndex;
 
 // UI customisation methods
 - (void)setBgLightDark:(NSNotification *)notification;
